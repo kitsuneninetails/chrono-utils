@@ -46,7 +46,6 @@ mod tests {
     /// x = year (b = before, a = after, s = same)
     /// y = year (b = before, a = after, s = same)
     /// z = year (b = before, a = after, s = same)
-
     #[test]
     fn test_years_ymd_bbb() {
         let test_date1 = DateTime::parse_from_rfc3339("2018-03-15T12:00:00Z").unwrap();
