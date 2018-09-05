@@ -9,6 +9,12 @@ pub trait MonthCalculations {
     /// Add a positive or negative number of months to self and return a new instance of self
     /// with the transformation applied.
     fn add_months(&self, num_months: i32) -> Self;
+
+    /// Set the day of the month and return the resulting DateTime.  If the day cannot be set,
+    /// because there is no such day in the month, etc., it will instead be set to the last
+    /// day of the month (for example, using `with_closest_day(30)` on a February DateTime will
+    /// result in a DateTime set to February 28 (non-leap year) or February 29 (leap year).
+    fn with_closest_day(&self, day: u32) -> Self;
 }
 
 impl<Tz> MonthCalculations for DateTime<Tz> where Tz: TimeZone {
@@ -30,30 +36,37 @@ impl<Tz> MonthCalculations for DateTime<Tz> where Tz: TimeZone {
 
         let new_date_year = self.with_year(self.year() + years_change).unwrap();
 
-        // Now check the day.  If the new month is :
-        // * 1, 3, 5, or 10 (Feb, Apr, Jun, Nov) and the day is 31, or
-        // * 1 (Feb) and the day is 30, or the day is 29 and it is NOT a leap year,
-        // Then the new day won't match to the month.  Instead, do the best to increment the month
-        // as requested, but change the day to match the last day of the new month.
+        new_date_year.with_day(1).unwrap()
+            .with_month0(actual_new_month as u32)
+            .expect("Value invalid: This means there is a very bad bug in the calculations!")
+            .with_closest_day(new_date_year.day())
+    }
 
-        let actual_day = match actual_new_month {
-            0 | 2 | 4 | 6 | 7 | 9 | 11 => new_date_year.day(),
-            3 | 5 | 8 | 10 => if new_date_year.day() >= 31 { 30 } else { new_date_year.day() },
+    fn with_closest_day(&self, day: u32) -> Self {
+        // Make sure the limit is 31 (as no month has more than 31 days)
+        let check_day = if day > 31 { 31 } else { day };
+
+        // Now check the day.  If the new month is :
+        // * 0, 2, 4, 6, 7, 9, 11 (Jan, Mar, May, Jul, Aug, Oct, Dec)=> Use the day as-is,
+        // * 3, 5, 8, or 10 (Feb, Apr, Jun, Sept, Nov) => Day is capped at 30,
+        // * 1 (Feb) => Check leap year.  If yes, cap the day at 29, otherwise cap at 28.
+        let actual_day = match self.month0() {
+            0 | 2 | 4 | 6 | 7 | 9 | 11 => check_day,
+            3 | 5 | 8 | 10 => if check_day > 30 { 30 } else { check_day },
             1 => {
-                let is_leapyear = new_date_year
+                let is_leapyear = self
                     .with_day(1).unwrap()
                     .with_month(2).unwrap()
                     .with_day(29).is_some();
                 if is_leapyear {
-                    if new_date_year.day() >= 30 { 29 } else { new_date_year.day() }
+                    if check_day >= 30 { 29 } else { check_day }
                 } else {
-                    if new_date_year.day() >= 29 { 28 } else { new_date_year.day() }
+                    if check_day >= 29 { 28 } else { check_day }
                 }
             },
             m => panic!("Month value of {} is invalid!", m),
         };
-        new_date_year.with_day(actual_day).unwrap()
-            .with_month0(actual_new_month as u32)
+        self.with_day(actual_day)
             .expect("Value invalid: This means there is a very bad bug in the calculations!")
     }
 }
